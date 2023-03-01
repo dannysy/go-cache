@@ -13,6 +13,8 @@ so it locks cache only on eviction of expired items.
 ### Usage
 
 ```go
+package main
+
 import (
 	"fmt"
 	"time"
@@ -43,7 +45,7 @@ func main() {
 		fmt.Printf("as string %v\n", foo.(string))
 	}
 	
-	//flush all of the cache items
+	//flush all cache items
 	c.Flush()
 }
 ```
