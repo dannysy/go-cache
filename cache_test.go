@@ -150,6 +150,23 @@ func TestDelete(t *testing.T) {
 	}
 }
 
+func TestPurgeByWatchdog(t *testing.T) {
+	tc := New(time.Millisecond * 50)
+	tc.Set("foo", "bar", time.Millisecond*150)
+	x, found := tc.Get("foo")
+	if !found {
+		t.Error("foo was not found, but it should have been stored")
+	}
+	time.Sleep(time.Millisecond * 200)
+	x, found = tc.Get("foo")
+	if found {
+		t.Error("foo was found, but it should have been purged")
+	}
+	if x != nil {
+		t.Error("x is not nil:", x)
+	}
+}
+
 func TestItemCount(t *testing.T) {
 	tc := New(DefaultPurgeInterval)
 	tc.Set("foo", "1", NoExpiration)
