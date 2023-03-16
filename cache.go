@@ -1,6 +1,7 @@
 package cache
 
 import (
+	"runtime"
 	"sync"
 	"time"
 )
@@ -22,7 +23,8 @@ func New(purgeInterval time.Duration) *Cache {
 		items: map[string]interface{}{},
 	}
 	c.wd = newWatchdog(&c, purgeInterval)
-	c.wd.run()
+	c.wd.start()
+	runtime.SetFinalizer(&c, func(c *Cache) { c.wd.stop() })
 	return &c
 }
 
@@ -67,6 +69,8 @@ type watchdog struct {
 	expirationSet map[string]int64
 	mu            sync.Mutex
 	purgeInterval time.Duration
+	purgeTimer    *time.Ticker
+	doneCh        chan struct{}
 }
 
 func newWatchdog(cache *Cache, purgeInterval time.Duration) *watchdog {
@@ -79,9 +83,14 @@ func newWatchdog(cache *Cache, purgeInterval time.Duration) *watchdog {
 	return &wd
 }
 
-func (w *watchdog) run() {
-	purgeTimer := time.NewTicker(w.purgeInterval)
-	go w.delete(purgeTimer.C)
+func (w *watchdog) start() {
+	w.purgeTimer = time.NewTicker(w.purgeInterval)
+	go w.delete()
+}
+
+func (w *watchdog) stop() {
+	close(w.doneCh)
+	w.purgeTimer.Stop()
 }
 
 func (w *watchdog) track(key string, expiresAt int64) {
@@ -96,10 +105,10 @@ func (w *watchdog) untrack(key string) {
 	w.mu.Unlock()
 }
 
-func (w *watchdog) delete(tickCh <-chan time.Time) {
+func (w *watchdog) delete() {
 	for {
 		select {
-		case <-tickCh:
+		case <-w.purgeTimer.C:
 			now := time.Now().UnixNano()
 			evictedKeys := make([]string, 0, len(w.expirationSet))
 			w.mu.Lock()
@@ -115,8 +124,8 @@ func (w *watchdog) delete(tickCh <-chan time.Time) {
 				delete(w.expirationSet, evictedKeys[i])
 			}
 			w.mu.Unlock()
-		default:
-			continue
+		case <-w.doneCh:
+			return
 		}
 	}
 }
